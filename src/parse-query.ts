@@ -1,3 +1,5 @@
+/** Adapted from https://github.com/GoogleChromeLabs/container-query-polyfill */
+
 /**
  * Copyright 2021 Google Inc. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +60,6 @@ type ContainerCondition =
 interface ContainerQueryDescriptor {
   name?: string;
   condition: ContainerCondition;
-  className: string;
 }
 
 interface AdhocParser {
@@ -73,22 +74,21 @@ interface ParseResult {
   endIndex: number;
 }
 
-function uid(): string {
-  return Array.from({ length: 16 }, () =>
-    Math.floor(Math.random() * 256).toString(16)
-  ).join("");
+interface ResizeObserverSize {
+  inlineSize: number;
+  blockSize: number;
 }
 
 function translateToLogicalProp(feature: string): string {
   switch (feature.toLowerCase()) {
-    case "inlinesize":
-      return "inlineSize";
-    case "blocksize":
-      return "blockSize";
-    case "width":
-      return "inlineSize";
-    case "height":
-      return "blockSize";
+    case 'inlinesize':
+      return 'inlineSize';
+    case 'blocksize':
+      return 'blockSize';
+    case 'width':
+      return 'inlineSize';
+    case 'height':
+      return 'blockSize';
     default:
       throw Error(`Unknown feature name ${feature} in container query`);
   }
@@ -111,60 +111,34 @@ function isSizeQueryFulfilled(
   }
 }
 
-function isQueryFullfilled_internal(
+export function isQueryFullfilled(
   condition: ContainerCondition,
   borderBox: ResizeObserverSize
 ): boolean {
   switch (condition.type) {
     case ContainerConditionType.ContainerConditionConjunction:
       return (
-        isQueryFullfilled_internal(condition.left, borderBox) &&
-        isQueryFullfilled_internal(condition.right, borderBox)
+        isQueryFullfilled(condition.left, borderBox) &&
+        isQueryFullfilled(condition.right, borderBox)
       );
     case ContainerConditionType.ContainerConditionDisjunction:
       return (
-        isQueryFullfilled_internal(condition.left, borderBox) ||
-        isQueryFullfilled_internal(condition.right, borderBox)
+        isQueryFullfilled(condition.left, borderBox) ||
+        isQueryFullfilled(condition.right, borderBox)
       );
     case ContainerConditionType.ContainerConditionNegation:
-      return !isQueryFullfilled_internal(condition.right, borderBox);
+      return !isQueryFullfilled(condition.right, borderBox);
     case ContainerConditionType.SizeQuery:
       return isSizeQueryFulfilled(condition, borderBox);
     default:
-      throw Error("wtf?");
+      throw Error('wtf?');
   }
 }
 
-export function isQueryFullfilled(
-  condition: ContainerCondition,
-  entry: ResizeObserverEntry
-): boolean {
-  let borderBox;
-  if ("borderBoxSize" in entry) {
-    // At the time of writing, the array will always be length one in Chrome.
-    // In Firefox, it won’t be an array, but a single object.
-    borderBox = entry.borderBoxSize?.[0] ?? entry.borderBoxSize;
-  } else {
-    // Safari doesn’t have borderBoxSize at all, but only offers `contentRect`,
-    // so we have to do some maths ourselves.
-    const computed = getComputedStyle(entry.target);
-    borderBox = {
-      // FIXME: This will if you are not in tblr writing mode
-      blockSize: entry.contentRect.height,
-      inlineSize: entry.contentRect.width,
-    };
-    // Cut off the "px" suffix from the computed styles.
-    borderBox.blockSize +=
-      parseInt(computed.paddingBlockStart.slice(0, -2)) +
-      parseInt(computed.paddingBlockEnd.slice(0, -2));
-    borderBox.inlineSize +=
-      parseInt(computed.paddingInlineStart.slice(0, -2)) +
-      parseInt(computed.paddingInlineEnd.slice(0, -2));
-  }
-  return isQueryFullfilled_internal(condition, borderBox);
-}
-
-export function parseContainerQuery(sheetSrc: string, srcUrl?: string): ParseResult {
+export function parseContainerQuery(
+  sheetSrc: string,
+  srcUrl?: string
+): ParseResult {
   const p: AdhocParser = {
     sheetSrc,
     index: 0,
@@ -172,10 +146,10 @@ export function parseContainerQuery(sheetSrc: string, srcUrl?: string): ParseRes
   };
 
   const startIndex = p.index;
-  //assertString(p, "@container");
+  // assertString(p, "@container");
   eatWhitespace(p);
-  let name: string = "";
-  if (peek(p) !== "(" && !lookAhead("size", p) && !lookAhead("style", p)) {
+  let name: string = '';
+  if (peek(p) !== '(' && !lookAhead('size', p) && !lookAhead('style', p)) {
     name = parseIdentifier(p);
     eatWhitespace(p);
   }
@@ -183,11 +157,9 @@ export function parseContainerQuery(sheetSrc: string, srcUrl?: string): ParseRes
   eatWhitespace(p);
   const endIndex = p.index;
   eatWhitespace(p);
-  const className = `cq_${uid()}`;
   return {
     query: {
       condition,
-      className,
       name,
     },
     startIndex,
@@ -199,8 +171,8 @@ function parseContainerCondition(p: AdhocParser): ContainerCondition {
   let left = parseNegatedContainerCondition(p);
 
   while (true) {
-    if (lookAhead("and", p)) {
-      assertString(p, "and");
+    if (lookAhead('and', p)) {
+      assertString(p, 'and');
       eatWhitespace(p);
       const right = parseNegatedContainerCondition(p);
       eatWhitespace(p);
@@ -209,8 +181,8 @@ function parseContainerCondition(p: AdhocParser): ContainerCondition {
         left,
         right,
       };
-    } else if (lookAhead("or", p)) {
-      assertString(p, "or");
+    } else if (lookAhead('or', p)) {
+      assertString(p, 'or');
       eatWhitespace(p);
       const right = parseNegatedContainerCondition(p);
       eatWhitespace(p);
@@ -227,8 +199,8 @@ function parseContainerCondition(p: AdhocParser): ContainerCondition {
 }
 
 function parseNegatedContainerCondition(p: AdhocParser): ContainerCondition {
-  if (lookAhead("not", p)) {
-    assertString(p, "not");
+  if (lookAhead('not', p)) {
+    assertString(p, 'not');
     eatWhitespace(p);
     return {
       type: ContainerConditionType.ContainerConditionNegation,
@@ -240,12 +212,12 @@ function parseNegatedContainerCondition(p: AdhocParser): ContainerCondition {
 
 function parseSizeOrStyleQuery(p: AdhocParser): ContainerCondition {
   eatWhitespace(p);
-  if (lookAhead("(", p)) return parseSizeQuery(p);
-  else if (lookAhead("size", p)) {
-    assertString(p, "size");
+  if (lookAhead('(', p)) return parseSizeQuery(p);
+  else if (lookAhead('size', p)) {
+    assertString(p, 'size');
     eatWhitespace(p);
     return parseSizeQuery(p);
-  } else if (lookAhead("style", p)) {
+  } else if (lookAhead('style', p)) {
     throw Error(`Style query not implement yet`);
   } else {
     throw Error(`Unknown container query type`);
@@ -253,10 +225,10 @@ function parseSizeOrStyleQuery(p: AdhocParser): ContainerCondition {
 }
 
 function parseSizeQuery(p: AdhocParser): ContainerCondition {
-  assertString(p, "(");
-  if (lookAhead("(", p)) {
+  assertString(p, '(');
+  if (lookAhead('(', p)) {
     const cond = parseContainerCondition(p);
-    assertString(p, ")");
+    assertString(p, ')');
     return cond;
   }
   eatWhitespace(p);
@@ -267,7 +239,7 @@ function parseSizeQuery(p: AdhocParser): ContainerCondition {
   eatWhitespace(p);
   const threshold = parseThreshold(p);
   eatWhitespace(p);
-  assertString(p, ")");
+  assertString(p, ')');
   eatWhitespace(p);
   return {
     type: ContainerConditionType.SizeQuery,
@@ -278,20 +250,20 @@ function parseSizeQuery(p: AdhocParser): ContainerCondition {
 }
 
 function parseComparator(p: AdhocParser): Comparator {
-  if (lookAhead(">=", p)) {
-    assertString(p, ">=");
+  if (lookAhead('>=', p)) {
+    assertString(p, '>=');
     return Comparator.GREATER_OR_EQUAL;
   }
-  if (lookAhead(">", p)) {
-    assertString(p, ">");
+  if (lookAhead('>', p)) {
+    assertString(p, '>');
     return Comparator.GREATER_THAN;
   }
-  if (lookAhead("<=", p)) {
-    assertString(p, "<=");
+  if (lookAhead('<=', p)) {
+    assertString(p, '<=');
     return Comparator.LESS_OR_EQUAL;
   }
-  if (lookAhead("<", p)) {
-    assertString(p, "<");
+  if (lookAhead('<', p)) {
+    assertString(p, '<');
     return Comparator.LESS_THAN;
   }
   throw Error(`Unknown comparator`);
@@ -321,7 +293,7 @@ function eatWhitespace(p: AdhocParser) {
 function advance(p: AdhocParser) {
   p.index++;
   if (p.index > p.sheetSrc.length) {
-    throw parseError(p, "Advanced beyond the end");
+    throw parseError(p, 'Advanced beyond the end');
   }
 }
 
@@ -346,7 +318,7 @@ function parseIdentifier(p: AdhocParser): string {
   identMatcher.lastIndex = p.index;
   const match = identMatcher.exec(p.sheetSrc);
   if (!match) {
-    throw parseError(p, "Expected an identifier");
+    throw parseError(p, 'Expected an identifier');
   }
   p.index += match[0].length;
   return match[0];
@@ -361,11 +333,11 @@ function parseThreshold(p: AdhocParser): number {
   numberMatcher.lastIndex = p.index;
   const match = numberMatcher.exec(p.sheetSrc);
   if (!match) {
-    throw parseError(p, "Expected a number");
+    throw parseError(p, 'Expected a number');
   }
   p.index += match[0].length;
   // TODO: Support other units?
-  assertString(p, "px");
+  assertString(p, 'px');
   const value = parseFloat(match[0]);
   if (Number.isNaN(value)) {
     throw parseError(p, `${match[0]} is not a valid number`);
